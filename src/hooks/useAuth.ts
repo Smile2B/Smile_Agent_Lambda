@@ -37,6 +37,8 @@ export function useAuth() {
             resolve(session);
           });
         });
+      } else {
+        setIsAuthenticated(false);
       }
     } catch (err) {
       console.error('Auth check error:', err);
@@ -60,28 +62,37 @@ export function useAuth() {
             return;
           }
 
-          const loginKey = `cognito-idp.${process.env.NEXT_PUBLIC_COGNITO_USER_POOL_REGION}.amazonaws.com/${process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID}`;
-          
-          const credentialsProvider = fromCognitoIdentityPool({
-            client: new CognitoIdentityClient({ 
-              region: process.env.NEXT_PUBLIC_COGNITO_USER_POOL_REGION 
-            }),
-            identityPoolId: process.env.NEXT_PUBLIC_COGNITO_IDENTITY_POOL_ID!,
-            logins: {
-              [loginKey]: session.getIdToken().getJwtToken()
-            }
-          });
+          const region = process.env.NEXT_PUBLIC_COGNITO_USER_POOL_REGION;
+          const identityPoolId = process.env.NEXT_PUBLIC_COGNITO_IDENTITY_POOL_ID;
+          const userPoolId = process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID;
 
+          if (!region || !identityPoolId || !userPoolId) {
+            reject(new Error('Missing required configuration'));
+            return;
+          }
+
+          const loginKey = `cognito-idp.${region}.amazonaws.com/${userPoolId}`;
+          
           try {
+            const client = new CognitoIdentityClient({ region });
+            const credentialsProvider = fromCognitoIdentityPool({
+              client,
+              identityPoolId,
+              logins: {
+                [loginKey]: session.getIdToken().getJwtToken()
+              }
+            });
+
             const credentials = await credentialsProvider();
             resolve(credentials);
           } catch (error) {
+            console.error('Error getting credentials:', error);
             reject(error);
           }
         });
       });
     } catch (error) {
-      console.error('Error getting credentials:', error);
+      console.error('Error in getCredentials:', error);
       throw error;
     }
   };
@@ -107,6 +118,9 @@ export function useAuth() {
         onFailure: (err) => {
           setError(err.message);
           reject(err);
+        },
+        newPasswordRequired: (userAttributes, requiredAttributes) => {
+          reject(new Error('NEW_PASSWORD_REQUIRED'));
         },
       });
     });
