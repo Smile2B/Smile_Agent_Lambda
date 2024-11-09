@@ -50,33 +50,40 @@ export function DiagramGenerator() {
         }
       });
 
-      const command = new InvokeCommand({
-        FunctionName: process.env.NEXT_PUBLIC_LAMBDA_FUNCTION_NAME || 'claude3-agent-function',
-        Payload: JSON.stringify({
+      // Prepare the payload to match the expected Lambda event structure
+      const payload = {
+        body: JSON.stringify({
           tool_type: "Diagram Tool",
           query: query
-        }),
+        })
+      };
+
+      const command = new InvokeCommand({
+        FunctionName: process.env.NEXT_PUBLIC_LAMBDA_FUNCTION_NAME || 'claude3-agent-function',
+        Payload: JSON.stringify(payload),  // Wrap the payload in the expected event structure
       });
 
       const response = await lambda.send(command);
       if (!response.Payload) {
         throw new Error("No response from Lambda");
       }
-      const payload = JSON.parse(new TextDecoder().decode(response.Payload));
+      const payloadResponse = JSON.parse(new TextDecoder().decode(response.Payload));
       
-      if (payload.statusCode === 200) {
-        const body = JSON.parse(payload.body);
+      if (payloadResponse.statusCode === 200) {
+        const body = JSON.parse(payloadResponse.body);
         if (body.success && body.type === "diagram") {
           return body.data.image;
         }
         throw new Error(body.message || "Failed to generate diagram");
       } else {
-        throw new Error(payload.body ? JSON.parse(payload.body).message : "Failed to generate diagram");
+        const errorBody = payloadResponse.body ? JSON.parse(payloadResponse.body) : {};
+        throw new Error(errorBody.message || "Failed to generate diagram");
       }
     } catch (error) {
       console.error("Error generating diagram:", error);
       throw error;
     }
+  
   }
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();

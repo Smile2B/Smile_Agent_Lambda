@@ -4,11 +4,12 @@ import json
 import os
 import subprocess
 import re
-import uuid
-import sys
-import logging
 from typing import Type, Union, Dict, Any, List
+import logging
+import sys
 import boto3
+from langchain_community.embeddings import BedrockEmbeddings
+from langchain_community.vectorstores import FAISS
 from PIL import Image
 from botocore.exceptions import ClientError
 
@@ -16,7 +17,7 @@ from botocore.exceptions import ClientError
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Initialize AWS clients with proper error handling
+# Initialize AWS clients
 try:
     bedrock_runtime = boto3.client(
         service_name="bedrock-runtime",
@@ -42,54 +43,12 @@ def load_json(path_to_json: str) -> Dict[str, Any]:
         logger.error(f"Error loading JSON file: {error}")
         raise
 
-# Load AWS service mapping with error handling
+# Load AWS service mapping
 try:
     aws_service_to_module_mapping = load_json("diag_mapping.json")
 except Exception as e:
     logger.error(f"Failed to load AWS service mapping: {e}")
     raise
-
-
-bedrock_runtime = boto3.client(
-    service_name="bedrock-runtime",
-    region_name="us-east-1",
-)
-
-
-def load_json(path_to_json: str) -> Dict[str, Any]:
-    """
-    Purpose:
-        Load json files
-    Args:
-        path_to_json (String): Path to  json file
-    Returns:
-        Conf: JSON file if loaded, else None
-    """
-    try:
-        with open(path_to_json, "r") as config_file:
-            conf = json.load(config_file)
-            return conf
-
-    except Exception as error:
-        logging.error(error)
-        raise TypeError("Invalid JSON file")
-
-    """
-    Purpose:
-        Load json files
-    Args:
-        path_to_json (String): Path to  json file
-    Returns:
-        Conf: JSON file if loaded, else None
-    """
-    try:
-        with open(path_to_json, "r") as config_file:
-            conf = json.load(config_file)
-            return conf
-
-    except Exception as error:
-        logging.error(error)
-        raise TypeError("Invalid JSON file")
 
 
 def pil_to_base64(image, format="png"):

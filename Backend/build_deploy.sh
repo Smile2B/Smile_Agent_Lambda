@@ -5,8 +5,9 @@ AWS_REGION="us-east-1"
 ECR_REPO_NAME="claude3-agent"
 LAMBDA_FUNCTION_NAME="claude3-agent-function"
 LAMBDA_ROLE_ARN="arn:aws:iam::905418109231:role/smile-agent-lambda-role"
-LAMBDA_MEMORY=1024
-LAMBDA_TIMEOUT=300
+LAMBDA_MEMORY=4096
+LAMBDA_TIMEOUT=900
+LAMBDA_EPHEMERAL_STORAGE=10240
 
 # Ensure AWS CLI is configured
 if ! aws sts get-caller-identity &> /dev/null; then
@@ -51,12 +52,13 @@ if [ $? -eq 0 ]; then
         echo "Waiting for Lambda function update to complete..."
         sleep 5
 
-        # Update Lambda configuration while preserving existing settings
+        # Update Lambda configuration
         echo "Updating Lambda configuration..."
         aws lambda update-function-configuration \
             --function-name ${LAMBDA_FUNCTION_NAME} \
             --timeout ${LAMBDA_TIMEOUT} \
-            --memory-size ${LAMBDA_MEMORY}
+            --memory-size ${LAMBDA_MEMORY} \
+            --ephemeral-storage Size=${LAMBDA_EPHEMERAL_STORAGE}
 
         echo "Function update completed successfully!"
     else
