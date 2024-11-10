@@ -1,15 +1,15 @@
+
 import base64
 import io
 import json
 import os
 import subprocess
 import re
-from typing import Type, Union, Dict, Any, List
-import logging
+import uuid
 import sys
+import logging
+from typing import Type, Union, Dict, Any, List
 import boto3
-from langchain_community.embeddings import BedrockEmbeddings
-from langchain_community.vectorstores import FAISS
 from PIL import Image
 from botocore.exceptions import ClientError
 
@@ -17,7 +17,13 @@ from botocore.exceptions import ClientError
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Initialize AWS clients
+# Set diagrams output directory to /tmp
+os.environ['DIAGRAMS_OUTPUT_DIR'] = '/tmp'
+# Ensure /tmp exists and is writable
+os.makedirs('/tmp', exist_ok=True)
+os.chmod('/tmp', 0o777)
+
+# Initialize AWS clients with proper error handling
 try:
     bedrock_runtime = boto3.client(
         service_name="bedrock-runtime",
@@ -43,13 +49,12 @@ def load_json(path_to_json: str) -> Dict[str, Any]:
         logger.error(f"Error loading JSON file: {error}")
         raise
 
-# Load AWS service mapping
+# Load AWS service mapping with error handling
 try:
     aws_service_to_module_mapping = load_json("diag_mapping.json")
 except Exception as e:
     logger.error(f"Failed to load AWS service mapping: {e}")
     raise
-
 
 def pil_to_base64(image, format="png"):
     """Convert PIL image to base64 with error handling"""
@@ -60,7 +65,6 @@ def pil_to_base64(image, format="png"):
     except Exception as e:
         logger.error(f"Error converting image to base64: {e}")
         raise
-
 def call_claude_3(
     system_prompt: str,
     prompt: str,
@@ -81,7 +85,6 @@ def call_claude_3(
                 }
             ],
         }
-
         body = json.dumps(prompt_config)
         
         response = bedrock_runtime.invoke_model(
@@ -93,14 +96,12 @@ def call_claude_3(
         
         response_body = json.loads(response.get("body").read())
         return response_body.get("content")[0].get("text")
-
     except ClientError as e:
         logger.error(f"AWS Bedrock error: {e}")
         raise
     except Exception as e:
         logger.error(f"Error calling Claude 3: {e}")
         raise
-
 
 def call_claude_3_code(
     system_prompt: str,
@@ -124,7 +125,6 @@ def call_claude_3_code(
                 {"role": "assistant", "content": "```"},
             ],
         }
-
         body = json.dumps(prompt_config)
         response = bedrock_runtime.invoke_model(
             body=body,
@@ -136,19 +136,14 @@ def call_claude_3_code(
         response_body = json.loads(response.get("body").read())
         results = response_body.get("content")[0].get("text")
         return results
-
     except Exception as e:
         logger.error(f"Error in code generation: {e}")
         raise
 
-
 def gen_image_caption(base64_string):
-
     system_prompt = """
-
     You are an experienced AWS Solutions Architect with deep knowledge of AWS services and best practices for designing and implementing cloud architectures. Maintain a professional and consultative tone, providing clear and detailed explanations tailored for technical audiences. Your task is to describe and explain AWS architecture diagrams presented by users. Your descriptions should cover the purpose and functionality of the included AWS services, their interactions, data flows, and any relevant design patterns or best practices.
     """
-
     prompt_config = {
         "anthropic_version": "bedrock-2023-05-31",
         "max_tokens": 4096,
@@ -173,27 +168,21 @@ def gen_image_caption(base64_string):
             }
         ],
     }
-
     body = json.dumps(prompt_config)
-
     modelId = "anthropic.claude-3-sonnet-20240229-v1:0"
     accept = "application/json"
     contentType = "application/json"
-
     response = bedrock_runtime.invoke_model(
         body=body, modelId=modelId, accept=accept, contentType=contentType
     )
     response_body = json.loads(response.get("body").read())
-
     results = response_body.get("content")[0].get("text")
     return results
-
 def call_claude_3_fill(
     system_prompt: str,
     prompt: str,
     model_id: str = "anthropic.claude-3-sonnet-20240229-v1:0",
 ):
-
     prompt_config = {
         "anthropic_version": "bedrock-2023-05-31",
         "max_tokens": 4096,
@@ -217,21 +206,16 @@ def call_claude_3_fill(
             },
         ],
     }
-
     body = json.dumps(prompt_config)
-
     modelId = model_id
     accept = "application/json"
     contentType = "application/json"
-
     response = bedrock_runtime.invoke_model(
         body=body, modelId=modelId, accept=accept, contentType=contentType
     )
     response_body = json.loads(response.get("body").read())
-
     results = response_body.get("content")[0].get("text")
     return results
-
 def aws_well_arch_tool(query):
     """
     Use this tool for any AWS related question to help customers understand best practices 
@@ -256,33 +240,26 @@ def aws_well_arch_tool(query):
         for doc in docs:
             doc_sources_string += doc.metadata["source"] + "\n" + doc.page_content
             context += doc.page_content
-
         prompt = f"""Use the following pieces of context to answer the question at the end.
-
         {context}
-
         Question: {query}
         Answer:"""
-
         system_prompt = """
         You are an expert certified AWS solutions architect professional, skilled at helping 
         customers solve their problems. You are able to reference context from the AWS 
         Well-Architected Framework to help customers solve their problem.
         """
-
         generated_text = call_claude_3(system_prompt, prompt)
         
         resp_json = {
             "ans": str(generated_text), 
             "docs": doc_sources_string
         }
-
         return resp_json
         
     except Exception as e:
         logging.error(f"Error in aws_well_arch_tool: {str(e)}")
         raise
-
 # helper functions
 def save_and_run_python_code(code: str, file_name: str = None):
     """Save and run Python code with enhanced error handling"""
@@ -337,12 +314,10 @@ os.environ['DIAGRAMS_OUTPUT_DIR'] = '/tmp'
 def process_code(code):
     # Split the code into lines
     lines = code.split("\n")
-
     # Initialize variables to store the updated code and diagram filename
     updated_lines = []
     diagram_filename = None
     inside_diagram_block = False
-
     for line in lines:
         if line == ".":
             line = line.replace(".", "")
@@ -352,17 +327,14 @@ def process_code(code):
             line = ""
         if line == "```":
             line = ""
-
         # Check if the line contains "with Diagram("
         if "with Diagram(" in line:
             # replace / in the line with _
             line = line.replace("/", "_")
-
             # Extract the diagram name between "with Diagram('NAME',"
             diagram_name = (
                 line.split("with Diagram(")[1].split(",")[0].strip("'").strip('"')
             )
-
             # Convert the diagram name to lowercase, replace spaces with underscores, and add ".png" extension
             diagram_filename = (
                 diagram_name.lower()
@@ -373,7 +345,6 @@ def process_code(code):
                 .replace(":", "")
                 + ".png"
             )
-
             # Check if the line contains "filename="
             if "filename=" in line:
                 # Extract the filename from the "filename=" parameter
@@ -381,180 +352,218 @@ def process_code(code):
                     line.split("filename=")[1].split(")")[0].strip("'").strip('"')
                     + ".png"
                 )
-
             inside_diagram_block = True
-
         # Check if the line contains the end of the "with Diagram:" block
         if inside_diagram_block and line.strip() == "":
             inside_diagram_block = False
-
         # TODO: not sure if it handles all edge cases...
         # Only include lines that are inside the "with Diagram:" block or not related to the diagram
         if inside_diagram_block or not line.strip().startswith("diag."):
             updated_lines.append(line)
-
     # Join the updated lines to create the updated code
     updated_code = "\n".join(updated_lines)
-
     return updated_code, diagram_filename
-
 def correct_imports(code):
     """
     Uses the mapping to ensure correct imports and handles AWS service name variants
     """
     try:
-        # Initialize lists to track services and their modules
-        detected_services = []
-        
-        # Create a mapping of service variants
-        service_variants = {
-            'LambdaFunction': 'Lambda',
-            'DynamoDb': 'Dynamodb',
-            'DynamoDB': 'Dynamodb',
-            'APIGateway': 'APIGateway'
+        # Initialize import modules dict
+        import_modules = {
+            'network': set(),
+            'compute': set(),
+            'database': set(),
+            'integration': set(),
+            'analytics': set(),
+            'storage': set(),
+            'security': set(),
         }
         
-        # Detect all AWS services mentioned in the code
-        for service in aws_service_to_module_mapping:
-            if service in code or service_variants.get(service, '') in code:
-                detected_services.append(service)
-                
-        logger.info(f"Detected services: {detected_services}")
-        
-        # Group services by their modules
-        module_to_services = {}
-        for service in detected_services:
-            module = aws_service_to_module_mapping[service]
-            if module not in module_to_services:
-                module_to_services[module] = set()  # Use set to avoid duplicates
-            module_to_services[module].add(service)
+        # Service mapping with all available services
+        service_mapping = {
+            # Network services
+            'VPC': ('network', 'VPC'),
+            'APIGateway': ('network', 'APIGateway'),
+            'CloudFront': ('network', 'CloudFront'),
+            'Route53': ('network', 'Route53'),
+            'NATGateway': ('network', 'NATGateway'),
+            'InternetGateway': ('network', 'InternetGateway'),
             
-        logger.info(f"Module mapping: {module_to_services}")
-        
+            # Compute services
+            'Lambda': ('compute', 'Lambda'),
+            'LambdaFunction': ('compute', 'Lambda'),
+            'EC2': ('compute', 'EC2'),
+            'ECS': ('compute', 'ECS'),
+            'EKS': ('compute', 'EKS'),
+            
+            # Database services
+            'Dynamodb': ('database', 'Dynamodb'),
+            'DynamoDB': ('database', 'Dynamodb'),
+            'RDS': ('database', 'RDS'),
+            'Redshift': ('database', 'Redshift'),
+            
+            # Storage services
+            'S3': ('storage', 'S3'),
+            'EBS': ('storage', 'EBS'),
+            'EFS': ('storage', 'EFS'),
+            
+            # Integration services
+            'SQS': ('integration', 'SQS'),
+            'SNS': ('integration', 'SNS'),
+            'EventBridge': ('integration', 'EventBridge'),
+            
+            # Analytics services
+            'Athena': ('analytics', 'Athena'),
+            'EMR': ('analytics', 'EMR'),
+            'Glue': ('analytics', 'Glue'),
+            'Kinesis': ('analytics', 'Kinesis'),
+            'KinesisDataFirehose': ('analytics', 'KinesisDataFirehose'),
+            'KinesisDataAnalytics': ('analytics', 'KinesisDataAnalytics'),
+            
+            # Security services
+            'IAM': ('security', 'IAM'),
+            'Cognito': ('security', 'Cognito'),
+            'SecretsManager': ('security', 'SecretsManager'),
+            'WAF': ('security', 'WAF'),
+        }
+
+        # Remove CloudWatch/monitoring references
+        code = '\n'.join(line for line in code.split('\n') 
+                        if not any(x in line.lower() for x in ['cloudwatch', 'monitoring']))
+
+        # Scan code for service usage
+        for service, (module, class_name) in service_mapping.items():
+            if service in code:
+                import_modules[module].add(class_name)
+
         # Generate import statements
         import_lines = ['from diagrams import Cluster, Diagram']
-        for module, services in module_to_services.items():
-            services_str = ', '.join(sorted(services))  # Sort for consistency
-            import_lines.append(f"from diagrams.aws.{module} import {services_str}")
-            
-        # Get the diagram code (everything after the imports)
-        diagram_code = ''
+        
+        # Add necessary imports based on what was found in the code
+        for module, services in import_modules.items():
+            if services:  # Only add import if we have services to import
+                services_str = ', '.join(sorted(services))
+                import_lines.append(f"from diagrams.aws.{module} import {services_str}")
+
+        # Add graph attributes
+        diagram_code = """
+graph_attr = {
+    "splines": "ortho",
+    "nodesep": "0.60",
+    "ranksep": "0.75",
+    "fontname": "Sans-Serif"
+}
+"""
+        # Extract the diagram code
         in_diagram = False
         for line in code.split('\n'):
             if 'with Diagram(' in line:
                 in_diagram = True
-                diagram_code = line + '\n'
-            elif in_diagram:
+                # Ensure proper filename
+                if 'filename=' not in line:
+                    line = line.replace('show=False', 
+                                     'show=False, filename="/tmp/diagram"')
+            if in_diagram:
                 diagram_code += line + '\n'
-                
-        # Combine imports and diagram code
+
+        # Generate final code
         final_code = '\n'.join(import_lines) + '\n\n' + diagram_code.strip()
-        
+
+        # Log the imports for debugging
         logger.info("Generated imports:")
-        logger.info(import_lines)
-        
+        for line in import_lines:
+            logger.info(line)
+            
         return final_code
 
     except Exception as e:
         logger.error(f"Error in correct_imports: {str(e)}")
         logger.error(f"Original code:\n{code}")
         raise
-
 # Update claude3_tools.py - diagram_tool function
-
 def diagram_tool(query):
+    
     """
     Generate diagrams with proper Docker path handling
     """
     try:
+        # Ensure /tmp exists and is writable
+        os.makedirs('/tmp', exist_ok=True)
+        
+        # Set environment variable for diagrams output
+        os.environ['DIAGRAMS_OUTPUT_DIR'] = '/tmp'
+        
+        # Generate a unique filename
+        filename = f"/tmp/diagram_{uuid.uuid4().hex}"
+
         system_prompt = f"""
-        You are an expert python programmer that has mastered the Diagrams library. You are able to write code to generate AWS diagrams based on what the user asks. Only return the code as it will be run through a program to generate the diagram for the user.
+    Important notes:
+    - For DynamoDB, use 'Dynamodb' not 'DynamoDB' as the class name
+    - For Lambda, use 'Lambda' not 'LambdaFunction' as the class name
+    - Use CloudWatchAlarm instead of CloudWatch
+    - CloudTrail is not available in the library
+    - For Secrets, use SecretsManager
+    - For monitoring, only use CloudWatchAlarm
+    - All files must be written to /tmp directory
+    - The diagram must include: filename="/tmp/diagram"
+    - Use supported services:
+      * network: APIGateway, CloudFront, Route53
+      * compute: Lambda
+      * database: Dynamodb, Redshift
+      * integration: SNS, SQS
+      * analytics: Athena, Glue, Kinesis, KinesisDataFirehose, KinesisDataAnalytics
+      * storage: S3
+      * security: IAM, SecretsManager
+      * management: CloudWatchAlarm
 
-        Important: For DynamoDB, use 'Dynamodb' not 'DynamoDB' as the class name.
-        For Lambda, use 'Lambda' not 'LambdaFunction' as the class name.
-
-        Here is the full list of services supported along with the correct import from the library: {aws_service_to_module_mapping}
-        """
+    Here is the full list of services supported along with the correct import from the library: {aws_service_to_module_mapping}
+    """
 
         code = call_claude_3_fill(system_prompt, query)
         logger.info("Base code:")
         logger.info(code)
 
-        # Clean up hallucinated code
-        code = code.replace("DynamoDB", "Dynamodb")  # Fix common class name issues
+        # Clean up hallucinated code and common issues
+        code = code.replace("DynamoDB", "Dynamodb")
         code = code.replace("LambdaFunction", "Lambda")
-        
-        code, file_name = process_code(code)
-        if not file_name:
-            raise ValueError("No filename was generated from the diagram code")
-            
+        code = code.replace("EventBridge", "SNS")  # Replace unsupported service
+        code = code.replace("CloudWatchEventEventBased", "CloudWatch")
         code = code.replace("```python", "").replace("```", "").replace('"""', "")
+        
+        # Process the code and get filename
+        if 'filename=' not in code:
+            code = code.replace('show=False',
+                              f'show=False, filename="{filename}"')
 
         logger.info("Cleaned code:")
         logger.info(code)
 
-        # Ensure proper imports
-        if "Dynamodb" in code and "from diagrams.aws.database import" in code:
-            code = code.replace(
-                "from diagrams.aws.database import",
-                "from diagrams.aws.database import Dynamodb,"
-            )
-
-        # Get the temp directory from environment variable
-        temp_dir = '/tmp'
-        
         # Ensure the temp directory exists
+        temp_dir = '/tmp'
         os.makedirs(temp_dir, exist_ok=True)
         os.chmod(temp_dir, 0o777)
         
-        # Construct minimal diagram code
-        diagram_code = f"""
-from diagrams import Cluster, Diagram
-from diagrams.aws.database import Dynamodb
-from diagrams.aws.compute import Lambda
-from diagrams.aws.network import APIGateway
-
-# Graph attributes
-graph_attr = {{
-    "splines": "ortho",
-    "nodesep": "0.60",
-    "ranksep": "0.75",
-    "fontname": "Sans-Serif"
-}}
-
-with Diagram(
-    filename="{os.path.join(temp_dir, 'diagram')}",
-    show=False,
-    outformat="png",
-    direction="LR",
-    graph_attr=graph_attr
-):
-    api = APIGateway("API Gateway")
-    with Cluster("Lambda"):
-        fn = Lambda("Function")
-    db = Dynamodb("DynamoDB")
-    
-    api >> fn >> db
-"""
+        # Apply correct imports and generate final code
+        final_code = correct_imports(code)
+        logger.info("Final code to execute:")
+        logger.info(final_code)
         
         # Write and execute the code
-        temp_file = os.path.join(temp_dir, 'diagram.py')
+        temp_file = f"{filename}.py"
         with open(temp_file, 'w') as f:
-            f.write(diagram_code)
+            f.write(code)
             
         result = subprocess.run(
             [sys.executable, temp_file],
-            env=os.environ,
             capture_output=True,
-            text=True,
-            timeout=30
+            text=True
         )
         
         if result.returncode != 0:
             raise Exception(f"Failed to generate diagram: {result.stderr}")
-
-        # Find the generated PNG file
-        png_file = os.path.join(temp_dir, 'diagram.png')
+            
+        # Check for the generated PNG file
+        png_file = f"{filename}.png"
         if not os.path.exists(png_file):
             raise FileNotFoundError(f"Generated diagram not found at {png_file}")
             
@@ -570,10 +579,10 @@ with Diagram(
             logger.warning(f"Cleanup warning: {e}")
             
         return img_copy
-
+        
     except Exception as e:
         logger.error(f"Error in diagram_tool: {str(e)}")
-        logger.error(f"Generated code:\n{diagram_code}")
+        logger.error(f"Generated code:\n{code}")
         return None
    
 def remove_first_line(text):
@@ -581,7 +590,6 @@ def remove_first_line(text):
     if len(lines) > 1:
         lines = lines[1:]
     return "\n".join(lines)
-
 def code_gen_tool(prompt):
     """
     Use this tool only when you need to generate code based on a customers's request. The input is the customer's question. The tool returns code that the customer can use.
@@ -589,9 +597,7 @@ def code_gen_tool(prompt):
     system_prompt = """
     You are an expert programmer with extensive knowledge of various programming languages and frameworks. Maintain a professional and efficient tone, focusing on providing concise and accurate code solutions. Your task is to provide code solutions to programming problems or requirements posed by users. The code should be well-commented, efficient, and follow best practices. You should not provide any explanations or additional context unless explicitly requested. The code should be formatted correctly and ready to be copied and pasted into an editor.
     """
-
     generated_text = call_claude_3_code(system_prompt, prompt)
     # remove first line
     generated_text = remove_first_line(generated_text)
-
     return generated_text

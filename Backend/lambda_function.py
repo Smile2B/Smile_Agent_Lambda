@@ -17,10 +17,87 @@ logger.setLevel(logging.INFO)
 # Set environment variables
 os.environ['DIAGRAMS_OUTPUT_DIR'] = '/tmp'
 
+os.makedirs('/tmp', exist_ok=True)
+os.chmod('/tmp', 0o777)
+
+def scan_aws_services():
+    """
+    Scans the installed diagrams library for all available AWS services
+    """
+    from diagrams.aws import (
+        analytics,
+        compute,
+        database,
+        network,
+        security,
+        storage,
+        integration
+    )
+    
+    modules_to_scan = {
+        'analytics': analytics,
+        'compute': compute,
+        'database': database,
+        'network': network,
+        'security': security,
+        'storage': storage,
+        'integration': integration
+    }
+    
+    service_mapping = {}
+    
+    for module_name, module in modules_to_scan.items():
+        try:
+            # Get all classes in the module
+            classes = [attr for attr in dir(module) 
+                      if not attr.startswith('_')]
+            
+            for class_name in classes:
+                service_mapping[class_name] = module_name
+                print(f"Found service: {class_name} in {module_name}")
+                
+        except Exception as e:
+            print(f"Error scanning module {module_name}: {str(e)}")
+    
+    return service_mapping
+
+def test_available_services():
+    """
+    Tests which services can actually be imported and used
+    """
+    import importlib
+    
+    service_mapping = scan_aws_services()
+    verified_services = {}
+    
+    for service, module in service_mapping.items():
+        try:
+            # Try to import and instantiate the service
+            module_path = f"diagrams.aws.{module}"
+            mod = importlib.import_module(module_path)
+            service_class = getattr(mod, service)
+            
+            # Try to create an instance (this will fail if the service isn't properly implemented)
+            _ = service_class("test")
+            
+            # If we get here, the service is available
+            verified_services[service] = module
+            print(f"Verified service: {service} in module {module}")
+            
+        except Exception as e:
+            print(f"Service {service} from {module} is not usable: {str(e)}")
+    
+    return verified_services
+
 def handler(event, context):
     """Main Lambda handler"""
     try:
-        # Log the incoming event
+        # Add this temporarily
+        print("Starting service scan...")
+        verified_services = test_available_services()
+        print("Complete verified services mapping:", verified_services)
+        
+        # Original handler code continues...
         logger.info(f"Received event: {json.dumps(event)}")
         
         # Parse the request body
@@ -31,6 +108,7 @@ def handler(event, context):
             
         tool_type = body.get('tool_type')
         query = body.get('query')
+        
         
         # Log parsed data
         logger.info(f"Tool Type: {tool_type}")

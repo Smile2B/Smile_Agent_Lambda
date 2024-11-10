@@ -47,18 +47,25 @@ export function DiagramGenerator() {
         }
       });
 
+      // Add timestamp and random string to ensure uniqueness
+      const requestId = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
+      
       const payload = {
         body: JSON.stringify({
           tool_type: "Diagram Tool",
-          query: query
+          query: query,
+          requestId: requestId  // Add unique identifier to request
         })
       };
 
-      console.log("Sending payload:", payload);
+      console.log("Sending request with ID:", requestId);
+      console.log("Query:", query);
 
       const command = new InvokeCommand({
         FunctionName: process.env.NEXT_PUBLIC_LAMBDA_FUNCTION_NAME || 'claude3-agent-function',
         Payload: JSON.stringify(payload),
+        // Add InvocationType to ensure we're not getting cached response
+        InvocationType: 'RequestResponse'
       });
 
       const response = await lambda.send(command);
@@ -69,12 +76,17 @@ export function DiagramGenerator() {
       const payloadStr = new TextDecoder().decode(response.Payload);
       const payloadResponse = JSON.parse(payloadStr);
       
+      // Log the full response for debugging
+      console.log("Full response for request", requestId, ":", payloadResponse);
+      
       if (payloadResponse.statusCode === 200) {
         const body = JSON.parse(payloadResponse.body);
         console.log("Response success:", body.success);
         console.log("Response type:", body.type);
         
         if (body.success && body.type === "diagram" && body.data.image) {
+          // Verify we're getting different image data
+          console.log("Image data hash:", hashCode(body.data.image));
           return body.data.image;
         }
         throw new Error(body.message || "Failed to generate diagram");
@@ -86,6 +98,17 @@ export function DiagramGenerator() {
       console.error("Error generating diagram:", error);
       throw error;
     }
+  }
+
+  // Simple hash function to compare responses
+  function hashCode(str: string): number {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash;
+    }
+    return hash;
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -103,10 +126,8 @@ export function DiagramGenerator() {
         throw new Error("No image data received");
       }
       
-      // Validate base64 data
       try {
-        atob(imageData);
-        console.log("Valid base64 data received");
+        atob(imageData); // Validate base64 data
         setDiagram(imageData);
       } catch (e) {
         console.error("Invalid base64 data received");
